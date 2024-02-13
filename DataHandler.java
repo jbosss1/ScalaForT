@@ -1,5 +1,4 @@
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -10,7 +9,7 @@ public class DataHandler implements Handler {
 
     public DataHandler(Client client) {
         this.client = client;
-        this.executorService = Executors.newFixedThreadPool(10);
+        this.executorService = Executors.newWorkStealingPool();
     }
 
     @Override
@@ -21,8 +20,11 @@ public class DataHandler implements Handler {
     @Override
     public void performOperation() {
         while (true) {
-            Event event = client.readData();
-            distributeData(event);
+            Optional<Event> optionalEvent = Optional.ofNullable(client.readData());
+            if (optionalEvent.isEmpty()) {
+                break;
+            }
+            distributeData(optionalEvent.get());
         }
     }
 
@@ -34,12 +36,11 @@ public class DataHandler implements Handler {
 
     private void sendDataWithRetry(Address recipient, Payload payload) {
         while (true) {
-            Result result = client.sendData(recipient, payload);
-            if (result == Result.ACCEPTED) {
+            Optional<Event> optionalEvent = Optional.ofNullable(client.readData());
+            if (optionalEvent.isEmpty()) {
                 break;
-            } else if (result == Result.REJECTED) {
-                sleep(timeout());
             }
+            distributeData(optionalEvent.get());
         }
     }
 
